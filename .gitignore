@@ -1,0 +1,17 @@
+# raw + interim data (never commit)
+data/raw/
+data/interim/
+
+# duckdb database artifacts
+duckdb/
+*.duckdb
+*.wal
+
+# python env + cache
+.venv/
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+
+# OS
+.DS_Store
