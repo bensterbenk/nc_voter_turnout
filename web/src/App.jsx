@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { MapContainer, TileLayer, GeoJSON } from "react-leaflet";
 import { csvParse } from "d3-dsv";
+import L from "leaflet";
 
 import countiesRaw from "./data/nc_counties.geojson?raw";
 import turnoutRaw from "./data/county_turnout_2022_2024_general.csv?raw";
@@ -23,6 +24,13 @@ function bucketColor(rate) {
 export default function App() {
   const countyGeo = useMemo(() => JSON.parse(countiesRaw), []);
   const rows = useMemo(() => csvParse(turnoutRaw), []);
+  const [mapInstance, setMapInstance] = useState(null);
+
+  // NC bounding box (roughly)
+  const ncBounds = L.latLngBounds(
+    [33.84, -84.32], // SW corner
+    [36.59, -75.40]  // NE corner
+  );
 
   // Elections available in your CSV
   const elections = useMemo(() => {
@@ -37,11 +45,11 @@ export default function App() {
 
   const [selectedElection, setSelectedElection] = useState(elections[0]?.date ?? "2022-11-08");
 
-  // Lookup keyed by `${election_date}|${county_fips}`
+  // Lookup keyed by `${election_date}|${county_name_uppercase}`
   const turnoutLookup = useMemo(() => {
     const map = new Map();
     for (const r of rows) {
-      const key = `${r.election_date}|${r.county_fips}`;
+      const key = `${r.election_date}|${r.county_desc.toUpperCase()}`;
       map.set(key, {
         turnout: clamp01(parseFloat(r.turnout_rate)),
         votersVoted: Number.parseInt(r.voters_voted, 10),
@@ -55,8 +63,8 @@ export default function App() {
 
   // Style counties by turnout
   const styleFeature = (feature) => {
-    const fips = feature?.properties?.FIPS; // "001"
-    const data = turnoutLookup.get(`${selectedElection}|${fips}`);
+    const countyName = feature?.properties?.County; // "Alamance"
+    const data = turnoutLookup.get(`${selectedElection}|${countyName.toUpperCase()}`);
     const turnout = data?.turnout ?? null;
 
     return {
@@ -70,11 +78,8 @@ export default function App() {
   // Tooltip on hover
   const onEachFeature = (feature, layer) => {
     const countyName = feature?.properties?.County; // "Alamance"
-    const fips = feature?.properties?.FIPS;
-    const fipsRaw = feature?.properties?.FIPS;
-    console.log("County:", countyName, "FIPS raw:", fipsRaw, "type:", typeof fipsRaw);
 
-    const data = turnoutLookup.get(`${selectedElection}|${fips}`);
+    const data = turnoutLookup.get(`${selectedElection}|${countyName.toUpperCase()}`);
     const turnoutText =
       data?.turnout == null ? "No data" : `${(data.turnout * 100).toFixed(1)}%`;
 
@@ -91,7 +96,7 @@ export default function App() {
 
   return (
     <div style={{ height: "100vh", display: "flex", flexDirection: "column" }}>
-      <div style={{ padding: 12, borderBottom: "1px solid #ddd" }}>
+      <div style={{ padding: 8, borderBottom: "1px solid #ddd" }}>
         <label style={{ marginRight: 8 }}>Election:</label>
         <select value={selectedElection} onChange={(e) => setSelectedElection(e.target.value)}>
           {elections.map((e) => (
@@ -103,11 +108,19 @@ export default function App() {
       </div>
 
       <div style={{ flex: 1 }}>
-        <MapContainer center={[35.5, -79.0]} zoom={7} style={{ height: "100%", width: "100%" }}>
-          <TileLayer
-            attribution="&copy; OpenStreetMap contributors"
-            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          />
+        <MapContainer 
+          center={[35.5, -79.0]} 
+          zoom={7.2} 
+          style={{ height: "100%", width: "100%", backgroundColor: "#f0f0f0" }}
+          dragging={true}
+          scrollWheelZoom={true}
+          doubleClickZoom={true}
+          zoomControl={true}
+          touchZoom={true}
+          maxBounds={[[33.84, -84.32], [36.59, -75.40]]}
+          maxBoundsViscosity={1.0}
+          ref={setMapInstance}
+        >
           <GeoJSON data={countyGeo} style={styleFeature} onEachFeature={onEachFeature} />
         </MapContainer>
       </div>
