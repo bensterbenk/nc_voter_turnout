@@ -11,14 +11,58 @@ function clamp01(x) {
   return Math.max(0, Math.min(1, x));
 }
 
-// Simple bucket palette (you can refine later)
+// Continuous color spectrum based on turnout rate
 function bucketColor(rate) {
   if (rate == null) return "#cccccc";
-  if (rate < 0.50) return "#fee5d9";
-  if (rate < 0.60) return "#fcae91";
-  if (rate < 0.65) return "#fb6a4a";
-  if (rate < 0.70) return "#de2d26";
-  return "#a50f15";
+  
+  // Define color stops (low to high turnout)
+  const colors = [
+    { rate: 0.0, hex: "#fee5d9" },  // very light peach
+    { rate: 0.5, hex: "#fcae91" },  // light orange
+    { rate: 0.6, hex: "#fb6a4a" },  // orange
+    { rate: 0.7, hex: "#de2d26" },  // red
+    { rate: 1.0, hex: "#a50f15" },  // dark red
+  ];
+  
+  // Find surrounding color stops
+  let lower = colors[0];
+  let upper = colors[colors.length - 1];
+  
+  for (let i = 0; i < colors.length - 1; i++) {
+    if (rate >= colors[i].rate && rate <= colors[i + 1].rate) {
+      lower = colors[i];
+      upper = colors[i + 1];
+      break;
+    }
+  }
+  
+  // Interpolate between the two surrounding colors
+  const t = (rate - lower.rate) / (upper.rate - lower.rate);
+  
+  const lowerRGB = hexToRgb(lower.hex);
+  const upperRGB = hexToRgb(upper.hex);
+  
+  const r = Math.round(lowerRGB.r + (upperRGB.r - lowerRGB.r) * t);
+  const g = Math.round(lowerRGB.g + (upperRGB.g - lowerRGB.g) * t);
+  const b = Math.round(lowerRGB.b + (upperRGB.b - lowerRGB.b) * t);
+  
+  return rgbToHex(r, g, b);
+}
+
+function hexToRgb(hex) {
+  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  return result ? {
+    r: parseInt(result[1], 16),
+    g: parseInt(result[2], 16),
+    b: parseInt(result[3], 16)
+  } : { r: 0, g: 0, b: 0 };
+}
+
+function rgbToHex(r, g, b) {
+  return "#" + [r, g, b].map(x => {
+    const hex = x.toString(16);
+    return hex.length === 1 ? "0" + hex : hex;
+  }).join("");
 }
 
 export default function App() {
