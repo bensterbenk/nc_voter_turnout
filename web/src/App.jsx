@@ -12,6 +12,33 @@ function clamp01(x) {
 }
 
 // --------------------
+// Selector styles
+// --------------------
+const controlStyles = {
+  wrapper: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 4,
+    fontSize: 12,
+    fontWeight: 600,
+    color: "#333",
+  },
+  select: {
+    appearance: "none",
+    padding: "6px 28px 6px 10px",
+    fontSize: 13,
+    borderRadius: 8,
+    border: "1px solid #ccc",
+    background: "white",
+    backgroundImage:
+      "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6'><path d='M0 0l5 6 5-6z' fill='%23666'/></svg>\")",
+    backgroundRepeat: "no-repeat",
+    backgroundPosition: "right 10px center",
+    cursor: "pointer",
+  },
+};
+
+// --------------------
 // Label maps
 // --------------------
 const PARTY_LABELS = {
@@ -66,7 +93,7 @@ function uniqSorted(rows, key) {
 }
 
 // --------------------
-// Color ramp (same as before)
+// Color ramp
 // --------------------
 function bucketColor(rate01) {
   if (rate01 == null) return "#cccccc";
@@ -126,7 +153,6 @@ function fmtPct(x) {
 }
 
 function Legend({ minPct, maxPct }) {
-  // simple 5-stop swatch legend, driven by displayed min/max percent
   const stops = [
     { t: 0.0, label: `${Math.round(minPct)}%` },
     { t: 0.25, label: `${Math.round(minPct + (maxPct - minPct) * 0.25)}%` },
@@ -152,25 +178,20 @@ function Legend({ minPct, maxPct }) {
       }}
     >
       <div style={{ fontWeight: 600, marginBottom: 8 }}>Turnout (color)</div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-        {stops.map((s) => (
-          <div key={s.t} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <div
-              style={{
-                width: 18,
-                height: 12,
-                borderRadius: 3,
-                border: "1px solid rgba(0,0,0,0.15)",
-                background: bucketColor(s.t),
-              }}
-            />
-            <div style={{ opacity: 0.9 }}>{s.label}</div>
-          </div>
-        ))}
-      </div>
-      <div style={{ marginTop: 8, opacity: 0.7 }}>
-        Light ≈ lower turnout, dark ≈ higher turnout
-      </div>
+      {stops.map((s) => (
+        <div key={s.t} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <div
+            style={{
+              width: 18,
+              height: 12,
+              borderRadius: 3,
+              border: "1px solid rgba(0,0,0,0.15)",
+              background: bucketColor(s.t),
+            }}
+          />
+          <div>{s.label}</div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -186,25 +207,24 @@ export default function App() {
     if (mapInstance) mapInstance.fitBounds(ncBounds);
   }, [mapInstance, ncBounds]);
 
-  // --------------------
-  // Election dropdown (from CSV)
-  // --------------------
-  const elections = useMemo(() => uniqSorted(demoRows, "election_date").sort().reverse(), [demoRows]);
+  const elections = useMemo(
+    () => uniqSorted(demoRows, "election_date").sort().reverse(),
+    [demoRows]
+  );
 
-  const [selectedElection, setSelectedElection] = useState(() => elections[0] || "2025-11-04");
+  const [selectedElection, setSelectedElection] = useState(() => elections[0] || "");
 
-  // If the CSV loads and elections become available, ensure we default to newest.
   useEffect(() => {
     if (elections.length && !elections.includes(selectedElection)) {
       setSelectedElection(elections[0]);
     }
   }, [elections, selectedElection]);
 
-  const demoRowsForElection = useMemo(() => {
-    return demoRows.filter((r) => (r.election_date || "").trim() === selectedElection);
-  }, [demoRows, selectedElection]);
+  const demoRowsForElection = useMemo(
+    () => demoRows.filter((r) => r.election_date === selectedElection),
+    [demoRows, selectedElection]
+  );
 
-  // Selector options (based on filtered demo rows)
   const parties = useMemo(() => ["All", ...uniqSorted(demoRowsForElection, "party_cd")], [demoRowsForElection]);
   const races = useMemo(() => ["All", ...uniqSorted(demoRowsForElection, "race_code")], [demoRowsForElection]);
   const ethnics = useMemo(() => ["All", ...uniqSorted(demoRowsForElection, "ethnic_code")], [demoRowsForElection]);
@@ -217,225 +237,133 @@ export default function App() {
   const [selectedSex, setSelectedSex] = useState("All");
   const [selectedAge, setSelectedAge] = useState("All");
 
-  // Per-county aggregated counts for selected filters
   const perCountyFiltered = useMemo(() => {
     const map = new Map();
-
     for (const r of demoRowsForElection) {
-      const county = (r.county_desc || "").toUpperCase().trim();
+      const county = (r.county_desc || "").toUpperCase();
       if (!county) continue;
-
       if (selectedParty !== "All" && r.party_cd !== selectedParty) continue;
       if (selectedRace !== "All" && r.race_code !== selectedRace) continue;
       if (selectedEthnic !== "All" && r.ethnic_code !== selectedEthnic) continue;
       if (selectedSex !== "All" && r.sex_code !== selectedSex) continue;
       if (selectedAge !== "All" && r.age_group !== selectedAge) continue;
 
-      const reg = Number.parseInt(r.registered_count || "0", 10) || 0;
-      const voted = Number.parseInt(r.voted_count || "0", 10) || 0;
+      const reg = +r.registered_count || 0;
+      const voted = +r.voted_count || 0;
 
-      if (!map.has(county)) map.set(county, { registered: 0, voted: 0, turnout: null });
-      const cur = map.get(county);
-      cur.registered += reg;
-      cur.voted += voted;
+      if (!map.has(county)) map.set(county, { registered: 0, voted: 0 });
+      map.get(county).registered += reg;
+      map.get(county).voted += voted;
     }
 
     for (const v of map.values()) {
-      v.turnout = v.registered === 0 ? null : clamp01(v.voted / v.registered);
+      v.turnout = v.registered ? clamp01(v.voted / v.registered) : null;
     }
 
     return map;
   }, [demoRowsForElection, selectedParty, selectedRace, selectedEthnic, selectedSex, selectedAge]);
 
-  // Statewide rollup for filters
-  const statewideFiltered = useMemo(() => {
-    let voted = 0;
-    let registered = 0;
-
-    for (const v of perCountyFiltered.values()) {
-      voted += v.voted || 0;
-      registered += v.registered || 0;
-    }
-
-    const turnout = registered === 0 ? null : voted / registered;
-    return { voted, registered, turnout };
-  }, [perCountyFiltered]);
-
-  // --------------------
-  // Percentile-based scaling for choropleth contrast
-  // (compute lo/hi on per-county turnout and normalize into 0..1)
-  // --------------------
   const colorScale = useMemo(() => {
-    const vals = [];
-    for (const v of perCountyFiltered.values()) {
-      if (v.turnout != null && Number.isFinite(v.turnout)) vals.push(v.turnout);
-    }
-    vals.sort((a, b) => a - b);
+    const vals = [...perCountyFiltered.values()]
+      .map((v) => v.turnout)
+      .filter((v) => v != null)
+      .sort((a, b) => a - b);
 
-    if (vals.length < 5) {
-      return { scale: (t) => (t == null ? null : clamp01(t)), lo: 0, hi: 1 };
-    }
+    if (vals.length < 5) return { scale: (t) => t, lo: 0, hi: 1 };
 
-    const q = (p) => vals[Math.floor(p * (vals.length - 1))];
-    const lo = q(0.05); // 5th percentile
-    const hi = q(0.95); // 95th percentile
-
-    const scale = (t) => {
-      if (t == null || !Number.isFinite(t)) return null;
-      if (hi === lo) return 0.5;
-      const x = Math.max(lo, Math.min(hi, t));
-      return (x - lo) / (hi - lo); // 0..1
-    };
-
-    return { scale, lo, hi };
-  }, [perCountyFiltered]);
-
-  const styleFeature = (feature) => {
-    const key = (feature?.properties?.County || "").toUpperCase();
-    const raw = perCountyFiltered.get(key)?.turnout ?? null;
-    const scaled01 = colorScale.scale(raw);
+    const lo = vals[Math.floor(vals.length * 0.05)];
+    const hi = vals[Math.floor(vals.length * 0.95)];
 
     return {
-      weight: 1,
-      color: "#666",
-      fillOpacity: 0.75,
-      fillColor: bucketColor(scaled01),
+      lo,
+      hi,
+      scale: (t) => (t == null ? null : (Math.min(hi, Math.max(lo, t)) - lo) / (hi - lo)),
     };
-  };
-
-  const onEachFeature = (feature, layer) => {
-    const countyName = feature?.properties?.County || "";
-    const key = countyName.toUpperCase();
-    const f = perCountyFiltered.get(key);
-
-    if (!f) {
-      layer.bindTooltip(`<strong>${countyName} County</strong><br/>No data`, { sticky: true });
-      return;
-    }
-
-    const turnoutText = fmtPct(f.turnout);
-    layer.bindTooltip(
-      `<strong>${countyName} County</strong><br/>Turnout: ${turnoutText}<br/>Voted: ${f.voted.toLocaleString()}<br/>Registered: ${f.registered.toLocaleString()}`,
-      { sticky: true }
-    );
-  };
-
-  // Legend min/max shown in % based on percentile window (matches color scale)
-  const legendMinPct = useMemo(() => {
-    if (!Number.isFinite(colorScale.lo)) return 0;
-    return Math.max(0, Math.min(100, colorScale.lo * 100));
-  }, [colorScale.lo]);
-
-  const legendMaxPct = useMemo(() => {
-    if (!Number.isFinite(colorScale.hi)) return 100;
-    return Math.max(0, Math.min(100, colorScale.hi * 100));
-  }, [colorScale.hi]);
+  }, [perCountyFiltered]);
 
   return (
     <div style={{ height: "100vh", display: "flex", flexDirection: "column" }}>
       <div
         style={{
-          padding: 8,
-          borderBottom: "1px solid #ddd",
+          padding: 12,
+          borderBottom: "1px solid #e0e0e0",
           display: "flex",
-          gap: 12,
+          gap: 14,
           flexWrap: "wrap",
-          alignItems: "center",
+          alignItems: "flex-end",
+          background: "#fafafa",
         }}
       >
-        <label>
-          <strong>Election:</strong>&nbsp;
-          <select value={selectedElection} onChange={(e) => setSelectedElection(e.target.value)}>
-            {elections.map((d) => (
-              <option key={d} value={d}>
-                {d}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label>
-          Party:&nbsp;
-          <select value={selectedParty} onChange={(e) => setSelectedParty(e.target.value)}>
-            {parties.map((p) => (
-              <option key={p} value={p}>
-                {labelFor(p, PARTY_LABELS)}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label>
-          Race:&nbsp;
-          <select value={selectedRace} onChange={(e) => setSelectedRace(e.target.value)}>
-            {races.map((r) => (
-              <option key={r} value={r}>
-                {labelFor(r, RACE_LABELS)}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label>
-          Ethnicity:&nbsp;
-          <select value={selectedEthnic} onChange={(e) => setSelectedEthnic(e.target.value)}>
-            {ethnics.map((e) => (
-              <option key={e} value={e}>
-                {labelFor(e, ETHNICITY_LABELS)}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label>
-          Gender:&nbsp;
-          <select value={selectedSex} onChange={(e) => setSelectedSex(e.target.value)}>
-            {sexes.map((s) => (
-              <option key={s} value={s}>
-                {labelFor(s, SEX_LABELS)}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label>
-          Age:&nbsp;
-          <select value={selectedAge} onChange={(e) => setSelectedAge(e.target.value)}>
-            {ages.map((a) => (
-              <option key={a} value={a}>
-                {labelFor(a, AGE_LABELS)}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <div style={{ marginLeft: "auto", fontSize: 12, opacity: 0.95 }}>
-          <strong>Statewide (filters):</strong>&nbsp;
-          {fmtPct(statewideFiltered.turnout)}{" "}
-          <span style={{ opacity: 0.75 }}>
-            (Voted: {statewideFiltered.voted.toLocaleString()} / Registered:{" "}
-            {statewideFiltered.registered.toLocaleString()})
-          </span>
-        </div>
+        {[
+          ["Election", selectedElection, setSelectedElection, elections],
+          ["Party", selectedParty, setSelectedParty, parties],
+          ["Race", selectedRace, setSelectedRace, races],
+          ["Ethnicity", selectedEthnic, setSelectedEthnic, ethnics],
+          ["Gender", selectedSex, setSelectedSex, sexes],
+          ["Age", selectedAge, setSelectedAge, ages],
+        ].map(([label, value, setter, options]) => (
+          <div key={label} style={controlStyles.wrapper}>
+            <span>{label}</span>
+            <select
+              style={controlStyles.select}
+              value={value}
+              onChange={(e) => setter(e.target.value)}
+            >
+              {options.map((o) => (
+                <option key={o} value={o}>
+                  {labelFor(o, {
+                    ...PARTY_LABELS,
+                    ...RACE_LABELS,
+                    ...ETHNICITY_LABELS,
+                    ...SEX_LABELS,
+                    ...AGE_LABELS,
+                  })}
+                </option>
+              ))}
+            </select>
+          </div>
+        ))}
       </div>
 
       <div style={{ position: "relative", flex: 1 }}>
-        {/* Legend top-right */}
-        <Legend minPct={legendMinPct} maxPct={legendMaxPct} />
+        <Legend minPct={colorScale.lo * 100} maxPct={colorScale.hi * 100} />
+
+        <div
+          style={{
+            position: "absolute",
+            bottom: 8,
+            left: 10,
+            zIndex: 1000,
+            fontSize: 11,
+            opacity: 0.75,
+            background: "rgba(255,255,255,0.85)",
+            padding: "4px 8px",
+            borderRadius: 6,
+            border: "1px solid #ddd",
+          }}
+        >
+          Designed by <strong>Ben Sterbenk</strong>
+        </div>
 
         <MapContainer
           style={{ height: "100%", width: "100%" }}
-          center={[35.5, -79.0]}
+          center={[35.5, -79]}
           zoom={7.2}
           maxBounds={[[33.84, -84.32], [36.59, -75.40]]}
-          maxBoundsViscosity={1.0}
           whenCreated={setMapInstance}
         >
           <GeoJSON
-            key={`${selectedElection}-${selectedParty}-${selectedRace}-${selectedEthnic}-${selectedSex}-${selectedAge}`}
             data={countyGeo}
-            style={styleFeature}
-            onEachFeature={onEachFeature}
+            style={(feature) => {
+              const key = feature.properties.County.toUpperCase();
+              const t = perCountyFiltered.get(key)?.turnout;
+              return {
+                weight: 1,
+                color: "#666",
+                fillOpacity: 0.75,
+                fillColor: bucketColor(colorScale.scale(t)),
+              };
+            }}
           />
         </MapContainer>
       </div>

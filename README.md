@@ -51,10 +51,13 @@ npm run dev
 - `web/` - React + Vite frontend
   - `web/src/data/` contains the generated CSVs used by the UI
 
-raw data was retrieved from North Carolina State Board of Elections through these two public datasets:
+Raw data was retrieved from North Carolina State Board of Elections through these two public datasets:
 
 https://www.ncsbe.gov/results-data/voter-history-data
+
 https://www.ncsbe.gov/results-data/voter-registration-data
+
+Currently, I host this app live on this URL: https://nc-voter-turnout.vercel.app/
 
 ---
 
